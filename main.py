@@ -5,6 +5,36 @@ import os
 import datetime
 import hashlib
 import getpass
+import readline
+from pynput import keyboard as KB
+
+
+class KeyPress:
+    _hotkeys = []
+    def __init__(self):
+        self._listener = KB.Listener(on_press=self._on_press, on_release=self._on_release)
+        self._listener.start()
+
+    def __del__(self):
+        self._listener.stop()
+
+    def _on_press(self, key):
+        for hotkey in self._hotkeys:
+            if any([key in hkey for hkey in hotkey["keys"]]):
+                hotkey["set"].add(key)
+                if any(all(k in hotkey["set"] for k in hkey) for hkey in hotkey["keys"]):
+                    hotkey["func"]()
+
+    def _on_release(self, key):
+        for hotkey in self._hotkeys:
+            try:
+                hotkey["set"].remove(key)
+            except KeyError:
+                pass
+
+    def hotkey(self, keys: list, func):
+        self._hotkeys.append({ "keys": keys, "func": func, "set" : set() })
+
 
 CEND      = '\33[0m'
 CBOLD     = '\33[1m'
@@ -197,6 +227,11 @@ class Vocabular:
     _ps = __ps
 
     def __init__(self):
+        readline.parse_and_bind('"\C-r": reverse-search-history')
+        readline.parse_and_bind("set bell-style none")
+        self._kp = KeyPress()
+        #self._kp.hotkey([{KB.Key.right}], right)
+        #self._kp.hotkey([{KB.Key.alt, KB.Key.left}, {KB.Key.ctrl, KB.Key.alt, KB.Key.left}], altleft)
         self._menu = Menu(self)
         self._um = UserManager("./data/users", "./data/userslog")
 
@@ -237,7 +272,12 @@ class Vocabular:
 
     def loop(self):
         while True:
-            cmd = input(self._ps)
+            cmd = ""
+            try:
+                cmd = input(self._ps)
+            except EOFError:
+                print()
+                cmd = ":q"
             if len(cmd) < 1:
                 continue
             if cmd[0] == ":":
