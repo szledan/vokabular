@@ -68,7 +68,6 @@ class CSVManager:
             open(self._csvfile, 'w').close()
         return self
 
-
     def parse(self):
         rows = []
         if Log.fileExists(self._csvfile):
@@ -104,7 +103,7 @@ class UserManager:
     def __init__(self, userfile, userlogfile):
         self._userfile = userfile
         self._userlogfile = userlogfile
-        self._userMgr = CSVManager(userfile)
+        self._userMgr = CSVManager(userfile).makeIfNotExist()
         self._userLogMgr = CSVManager(userlogfile).makeIfNotExist()
         self._users = self._userMgr.parse()
 
@@ -172,7 +171,8 @@ class Menu:
             for r in lastLoggedUsers:
                 print(r[0] + "\t" + r[1])
         if c == "c":
-            self.menuManageUsers(cmd)
+            self._voc.finish()
+            self._voc.login(trylast=False)
 
     def menuHelp(self):
         def _p(k, m):
@@ -197,18 +197,21 @@ class Vocabular:
     _ps = __ps
 
     def __init__(self):
+        self._menu = Menu(self)
         self._um = UserManager("./data/users", "./data/userslog")
 
     def init(self):
-        self._menu = Menu(self)
+        #! TODO: user spec load
+        print("Welcome!")
+        print()
 
     def finish(self):
         subprocess.call(['setxkbmap', 'hu'])
         print("Goodbye!")
 
-    def login(self):
+    def login(self, trylast=True):
         loggedin = False
-        if len(self._um.lastLogin()) > 0:
+        if trylast and len(self._um.lastLogin()) > 0:
             lastUser = self._um.lastLogin()[2]
             print("Try login '" + lastUser + "'...")
             loggedin = self._um.trylogin(lastUser)
@@ -232,9 +235,6 @@ class Vocabular:
         print()
         self.init()
 
-        print("Welcome!")
-        print()
-
     def loop(self):
         while True:
             cmd = input(self._ps)
@@ -244,17 +244,20 @@ class Vocabular:
                 self._menu.menu(cmd[1:])
 
 
-print(CBOLD + " --== Vocabular 1.0 ==-- " + CEND)
-print(CGREY + "(C) 2022. Szilárd LEDÁN (szledan@gmail.com)" + CEND)
-print()
-voc = Vocabular()
-voc.login()
-voc.loop()
+def main():
+    print(CBOLD + " --== Vocabular 1.0 ==-- " + CEND)
+    print(CGREY + "(C) 2022. Szilárd LEDÁN (szledan@gmail.com)" + CEND)
+    print()
+    voc = Vocabular()
+    voc.login()
+    voc.loop()
 
 
+if __name__ == "__main__":
+    main()
 
 
-
+#################################################################################x
 
 words = [
     ["da", "igen"],
