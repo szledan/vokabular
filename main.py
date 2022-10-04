@@ -1,6 +1,10 @@
 import subprocess
 import random
-
+import csv
+import os
+import datetime
+import hashlib
+import getpass
 
 CEND      = '\33[0m'
 CBOLD     = '\33[1m'
@@ -9,7 +13,6 @@ CURL      = '\33[4m'
 CBLINK    = '\33[5m'
 CBLINK2   = '\33[6m'
 CSELECTED = '\33[7m'
-
 CBLACK  = '\33[30m'
 CRED    = '\33[31m'
 CGREEN  = '\33[32m'
@@ -18,31 +21,239 @@ CBLUE   = '\33[34m'
 CVIOLET = '\33[35m'
 CBEIGE  = '\33[36m'
 CWHITE  = '\33[37m'
-
+CGREY    = '\33[90m'
+CRED2    = '\33[91m'
+CGREEN2  = '\33[92m'
+CYELLOW2 = '\33[93m'
+CBLUE2   = '\33[94m'
+CVIOLET2 = '\33[95m'
+CBEIGE2  = '\33[96m'
+CWHITE2  = '\33[97m'
 CUR_UP_BEGIN = '\033[F'
 
 
-class Vocabular:
-    def __init__(self):
-        print("LOG")
+class Log:
+    errorOn = True
+    warningOn = True
+    def e(msg):
+        if Log.errorOn:
+            print(CRED + "[ERR]: " + msg + CEND)
+    def w(msg):
+        if Log.warningOn:
+            print(CBEIGE + "[WAR]: " + msg + CEND)
+    def fileExists(filename):
+        if not os.path.exists(filename):
+            Log.e("The '" + filename + "' file does not exist!")
+            return False
+        return True
 
-    def menuHelp(self):
-        print("q – quit")
-        print("h – show this help")
-        print("? – help in the quest")
+
+class CSVManager:
+    _csvfile=""
+
+    def __init__(self, csvfile):
+        self._csvfile = csvfile
+
+    def decomment(csv):
+        for row in csv:
+            raw = row.split('#')[0].strip()
+            if raw:
+                yield raw
+
+    def csvfile():
+        return self._csvfile
+
+    def makeIfNotExist(self):
+        if not os.path.exists(self._csvfile):
+            open(self._csvfile, 'w').close()
+        return self
+
+
+    def parse(self):
+        rows = []
+        if Log.fileExists(self._csvfile):
+            with open(self._csvfile, newline='') as csvfile:
+                csvReader = csv.reader(CSVManager.decomment(csvfile), delimiter=';')
+                for row in csvReader:
+                    rows.append(row)
+                csvfile.close()
+        if len(rows) < 1:
+            Log.w("The output list is empty on '" + self._csvfile + "' file.")
+        return rows
+
+    def append(self, row: list):
+        if Log.fileExists(self._csvfile):
+            with open(self._csvfile, 'a') as csvfile:
+                csvWriter = csv.writer(csvfile, delimiter=';')
+                csvWriter.writerow(row)
+                csvfile.close()
+
+    # TODO: def remove(csvfile, item, column: int, all = False):
+
+    #def change(csvfile, key, column: int, value):
+
+
+class UserManager:
+    __noUser = "UNKNOW"
+
+    _user = __noUser
+    _users = []
+    _userfile = ""
+    _userlogfile = ""
+
+    def __init__(self, userfile, userlogfile):
+        self._userfile = userfile
+        self._userlogfile = userlogfile
+        self._userMgr = CSVManager(userfile)
+        self._userLogMgr = CSVManager(userlogfile).makeIfNotExist()
+        self._users = self._userMgr.parse()
+
+    def userlist(self):
+        return self._users
+
+    def userlogMgr(self):
+        return self._userLogMgr
+
+    def trylogin(self, userName, password = ""):
+        return (userName, password) in [(item[0], item[1]) for item in self._users]
+
+
+    def login(self, userName, password = ""):
+        passwordMD5 = "" if len(password) < 1 else hashlib.md5(password.encode()).hexdigest()
+        successed = (userName, passwordMD5) in [(item[0], str(item[1])) for item in self._users]
+        nowStr = datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+        self._userLogMgr.append(["LOGIN", int(successed), userName, nowStr])
+        return successed
+
+    def lastLogin(self):
+        rows = self._userLogMgr.parse()
+        for row in reversed(rows):
+            if row[0] == "LOGIN" and row[1] == "1":
+                return row
+        return []
+
+    def add(self, userName, password = ""):
+        if userName in [item[0] for item in self._users]:
+            return
+
+        passwordMD5 = "" if len(password) < 1 else hashlib.md5(password.encode()).hexdigest()
+        row = [userName, passwordMD5]
+        self._userMgr.append(row)
+
+    #def remove(self, userName)
+    #def rename(self, oldUserName, newUserName)
+
+
+class Menu:
+    def __init__(self, voc):
+        self._voc = voc
+
+    def _adv(s):
+        if len(s) < 1:
+            return '', s
+        return s[0], s[1:]
 
     def menuExit(self):
-        subprocess.call(['setxkbmap', 'hu'])
+        self._voc.finish()
         exit()
 
-    def menu(self, inpt):
-        for c in inpt[1:].lower():
-            if c == "h":
-                self.menuHelp()
-            if c == "q":
-                self.menuExit()
-            if c == "?":
-                print("TODO")
+    def menuManageUsers(self, cmd):
+        c, cmd = Menu._adv(cmd)
+        if c == "l":
+            lastLoggedUsers = []
+            users = self._voc._um.userlist()
+            userlog = self._voc._um.userlogMgr().parse()
+            for user in users:
+                for row in reversed(userlog):
+                    if row[0] == "LOGIN" and row[1] == "1" and row[2] == user[0]:
+                        lastLoggedUsers.append([user[0], row[3]])
+                        break
+            print("User\tLast login")
+            for r in lastLoggedUsers:
+                print(r[0] + "\t" + r[1])
+        if c == "c":
+            self.menuManageUsers(cmd)
+
+    def menuHelp(self):
+        def _p(k, m):
+            print(k + CGREY + m + CEND)
+        _p(":q", " – quit")
+        _p(":u", " – manage users – ':ul' list; ':uc' change; ':un' add new; ':ud' delete; ':um' rename")
+        _p(":h", " – show this help")
+
+    def menu(self, cmd):
+        c, cmd = Menu._adv(cmd)
+        if c == "q":
+            self.menuExit()
+        if c == "u":
+            self.menuManageUsers(cmd)
+        if c == "h":
+            self.menuHelp()
+
+
+class Vocabular:
+    __ps = "> "
+
+    _ps = __ps
+
+    def __init__(self):
+        self._um = UserManager("./data/users", "./data/userslog")
+
+    def init(self):
+        self._menu = Menu(self)
+
+    def finish(self):
+        subprocess.call(['setxkbmap', 'hu'])
+        print("Goodbye!")
+
+    def login(self):
+        loggedin = False
+        if len(self._um.lastLogin()) > 0:
+            lastUser = self._um.lastLogin()[2]
+            print("Try login '" + lastUser + "'...")
+            loggedin = self._um.trylogin(lastUser)
+            if not loggedin:
+                print(CRED + "FAIL" + CEND)
+
+        probe = 3
+        while not loggedin:
+            if probe < 1:
+                exit()
+            probe = probe - 1
+            userName = input(" Username: ")
+            password = getpass.getpass(" Password: ")
+            loggedin = self._um.login(userName, password)
+            if not loggedin:
+                print(CRED + "FAIL" + CEND)
+        print(CGREEN + "SUCCESS" + CEND)
+        print()
+
+        print("Loading...")
+        print()
+        self.init()
+
+        print("Welcome!")
+        print()
+
+    def loop(self):
+        while True:
+            cmd = input(self._ps)
+            if len(cmd) < 1:
+                continue
+            if cmd[0] == ":":
+                self._menu.menu(cmd[1:])
+
+
+print(CBOLD + " --== Vocabular 1.0 ==-- " + CEND)
+print(CGREY + "(C) 2022. Szilárd LEDÁN (szledan@gmail.com)" + CEND)
+print()
+voc = Vocabular()
+voc.login()
+voc.loop()
+
+
+
+
 
 
 words = [
@@ -59,7 +270,6 @@ for i in range(4):
     d = random.randrange(2)
     tasks.append([d, pair[d], pair[(d + 1) % 2]])
 
-voc = Vocabular()
 
 MP = 3
 P = 0
