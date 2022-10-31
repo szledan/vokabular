@@ -1,12 +1,71 @@
 import subprocess
 import random
 import csv
+import sys
 import os
 import datetime
 import hashlib
 import getpass
 import readline
 from pynput import keyboard as KB
+
+
+CEND      = '\33[0m'
+CBOLD     = '\33[1m'
+CITALIC   = '\33[3m'
+CURL      = '\33[4m'
+CBLINK    = '\33[5m'
+CBLINK2   = '\33[6m'
+CSELECTED = '\33[7m'
+CBLACK  = '\33[30m'
+CRED    = '\33[31m'
+CGREEN  = '\33[32m'
+CYELLOW = '\33[33m'
+CBLUE   = '\33[34m'
+CVIOLET = '\33[35m'
+CBEIGE  = '\33[36m'
+CWHITE  = '\33[37m'
+CGREY    = '\33[90m'
+CRED2    = '\33[91m'
+CGREEN2  = '\33[92m'
+CYELLOW2 = '\33[93m'
+CBLUE2   = '\33[94m'
+CVIOLET2 = '\33[95m'
+CBEIGE2  = '\33[96m'
+CWHITE2  = '\33[97m'
+CUR_UP_BEGIN = '\033[F'
+SAVE_CUR_POS = '\033[s'
+LOAD_CUR_POS = '\033[u'
+
+
+def saveCurPos():
+    print(SAVE_CUR_POS, end="")
+    sys.stdout.flush()
+
+
+def loadCurPos():
+    print(LOAD_CUR_POS, end="")
+    sys.stdout.flush()
+
+
+def quit():
+    exit()
+
+
+class Log:
+    errorOn = True
+    warningOn = True
+    def e(msg):
+        if Log.errorOn:
+            print(CRED + "[ERR]: " + msg + CEND)
+    def w(msg):
+        if Log.warningOn:
+            print(CBEIGE + "[WAR]: " + msg + CEND)
+    def fileExists(filename):
+        if not os.path.exists(filename):
+            Log.e("The '" + filename + "' file does not exist!")
+            return False
+        return True
 
 
 class KeyPress:
@@ -34,48 +93,6 @@ class KeyPress:
 
     def hotkey(self, keys: list, func):
         self._hotkeys.append({ "keys": keys, "func": func, "set" : set() })
-
-
-CEND      = '\33[0m'
-CBOLD     = '\33[1m'
-CITALIC   = '\33[3m'
-CURL      = '\33[4m'
-CBLINK    = '\33[5m'
-CBLINK2   = '\33[6m'
-CSELECTED = '\33[7m'
-CBLACK  = '\33[30m'
-CRED    = '\33[31m'
-CGREEN  = '\33[32m'
-CYELLOW = '\33[33m'
-CBLUE   = '\33[34m'
-CVIOLET = '\33[35m'
-CBEIGE  = '\33[36m'
-CWHITE  = '\33[37m'
-CGREY    = '\33[90m'
-CRED2    = '\33[91m'
-CGREEN2  = '\33[92m'
-CYELLOW2 = '\33[93m'
-CBLUE2   = '\33[94m'
-CVIOLET2 = '\33[95m'
-CBEIGE2  = '\33[96m'
-CWHITE2  = '\33[97m'
-CUR_UP_BEGIN = '\033[F'
-
-
-class Log:
-    errorOn = True
-    warningOn = True
-    def e(msg):
-        if Log.errorOn:
-            print(CRED + "[ERR]: " + msg + CEND)
-    def w(msg):
-        if Log.warningOn:
-            print(CBEIGE + "[WAR]: " + msg + CEND)
-    def fileExists(filename):
-        if not os.path.exists(filename):
-            Log.e("The '" + filename + "' file does not exist!")
-            return False
-        return True
 
 
 class CSVManager:
@@ -146,7 +163,6 @@ class UserManager:
     def trylogin(self, userName, password = ""):
         return (userName, password) in [(item[0], item[1]) for item in self._users]
 
-
     def login(self, userName, password = ""):
         passwordMD5 = "" if len(password) < 1 else hashlib.md5(password.encode()).hexdigest()
         successed = (userName, passwordMD5) in [(item[0], str(item[1])) for item in self._users]
@@ -161,21 +177,109 @@ class UserManager:
                 return row
         return []
 
-    def add(self, userName, password = ""):
-        if userName in [item[0] for item in self._users]:
-            return
+    def add(self, username = "", password = ""):
+        usedNames = [item[0] for item in self._users]
+        def checkName(name):
+            if name == "" or not name.replace('_', '').isalnum() or not name.isascii():
+                return 1
+            if userName in [item[0] for item in usedNames]:
+                return 2
+            return 0
+        userName = username
+        usable = checkName(userName)
+        passWord = password
+        same = False
 
-        passwordMD5 = "" if len(password) < 1 else hashlib.md5(password.encode()).hexdigest()
+        if username == "":
+            print("Add new user.")
+            i = 0
+            while True:
+                userName = input(" Username: ")
+                readline.remove_history_item(readline.get_current_history_length() - 1)
+                usable = checkName(userName)
+                if usable == 1:
+                    print(CRED + "Please use alphanumeric ascii or underscore characters." + CEND)
+                elif usable == 2:
+                    print(CRED + "Username is already used or empty!" + CEND)
+                else:
+                    break
+                if i > 1:
+                    return False
+                i = i + 1
+
+            for i in range(3):
+                password1 = getpass.getpass(" Password 1.: ")
+                password2 = getpass.getpass(" Password 2.: ")
+                same = password1 == password2
+                if same:
+                    passWord = password1
+                    break
+                else:
+                    print(CRED + "Passwords not equal!" + CEND)
+        if usable > 0 or not same:
+            return False
+
+        passwordMD5 = "" if len(passWord) < 1 else hashlib.md5(passWord.encode()).hexdigest()
         row = [userName, passwordMD5]
         self._userMgr.append(row)
+        self._users = self._userMgr.parse()
+        # TODO: create user-spec files
+        if username == "":
+            print("The '" + userName + "' user added.")
+        return True
 
     #def remove(self, userName)
     #def rename(self, oldUserName, newUserName)
 
 
 class Menu:
-    def __init__(self, voc):
-        self._voc = voc
+    def __init__(self, vok):
+        class Completer:
+            def __init__(self, logic):
+                self.logic = logic
+
+            def traverse(self, tokens, tree):
+                if tree is None:
+                    return []
+                elif len(tokens) == 0:
+                    return []
+                if len(tokens) == 1:
+                    return [ x + ' ' for x in tree if x.startswith(tokens[0]) ]
+                else:
+                    if tokens[0] in tree.keys():
+                        return self.traverse(tokens[1:],tree[tokens[0]])
+                    else:
+                        return []
+                return []
+
+            def complete(self, text, state):
+                try:
+                    tokens = readline.get_line_buffer().split()
+                    if not tokens or readline.get_line_buffer()[-1] == ' ':
+                        tokens.append('')
+                    results = self.traverse(tokens, self.logic) + [None]
+                    #print("results: ", results)
+                    return results[state]
+                except Exception as e:
+                    print(e)
+
+        logic = {
+            'quit': None,
+            'help': None,
+            'user':
+                    {
+                    'list':None,
+                    'switch':None,
+                    'add':None
+                    }
+            }
+
+        completer = Completer(logic)
+        readline.set_completer(completer.complete)
+        readline.parse_and_bind('"\C-r": reverse-search-history')
+        readline.parse_and_bind("set bell-style none")
+        readline.parse_and_bind('tab: complete')
+        self._vok = vok
 
     def _adv(s):
         if len(s) < 1:
@@ -183,15 +287,27 @@ class Menu:
         return s[0], s[1:]
 
     def menuExit(self):
-        self._voc.finish()
-        exit()
+        self._vok.logout()
+        quit()
+
+    def menuHelp(self):
+        def _p(k, m):
+            print(k + CGREY + m + CEND)
+        _p(":q", " – quit")
+        _p(":h", " – show this help")
+        #_p(":l", " – manage languages – ':ln [hu]' list/set native language; ':lc en' choosing the language to learn")
+        _p(":u", " – manage users – ':ul' list; ':uc' change; ':un' add new; ':ud' delete; ':um' rename")
+
+    def menuManageLanguages(self):
+        c, cmd = Menu._adv(cmd)
+#        if c == "n":
 
     def menuManageUsers(self, cmd):
         c, cmd = Menu._adv(cmd)
         if c == "l":
             lastLoggedUsers = []
-            users = self._voc._um.userlist()
-            userlog = self._voc._um.userlogMgr().parse()
+            users = self._vok._um.userlist()
+            userlog = self._vok._um.userlogMgr().parse()
             for user in users:
                 for row in reversed(userlog):
                     if row[0] == "LOGIN" and row[1] == "1" and row[2] == user[0]:
@@ -201,50 +317,71 @@ class Menu:
             for r in lastLoggedUsers:
                 print(r[0] + "\t" + r[1])
         if c == "c":
-            self._voc.finish()
-            self._voc.login(trylast=False)
-
-    def menuHelp(self):
-        def _p(k, m):
-            print(k + CGREY + m + CEND)
-        _p(":q", " – quit")
-        _p(":u", " – manage users – ':ul' list; ':uc' change; ':un' add new; ':ud' delete; ':um' rename")
-        _p(":h", " – show this help")
+            self._vok.logout()
+            self._vok.login(trylast=False)
+        if c == "n":
+            self._vok._um.add()
 
     def menu(self, cmd):
         c, cmd = Menu._adv(cmd)
         if c == "q":
             self.menuExit()
-        if c == "u":
-            self.menuManageUsers(cmd)
         if c == "h":
             self.menuHelp()
+        if c == "l":
+            self.menuManageLanguages(cmd)
+        if c == "u":
+            self.menuManageUsers(cmd)
 
 
-class Vocabular:
+class Vokabular:
     __ps = "> "
+    __dataDirName = "data"
+    __mainConfigDirName = ".config"
+    __usersCSVName = "users"
+    __usersLogCSVName = "userslog"
 
     _ps = __ps
 
-    def __init__(self):
-        readline.parse_and_bind('"\C-r": reverse-search-history')
-        readline.parse_and_bind("set bell-style none")
+    def __init__(self, dataDir = ""):
+        print(CBOLD + " --== Vocabular 1.0 ==-- " + CEND)
+        print(CGREY + "(C) 2022. Szilárd LEDÁN (szledan@gmail.com)" + CEND)
+        print()
         self._kp = KeyPress()
-        #self._kp.hotkey([{KB.Key.right}], right)
-        #self._kp.hotkey([{KB.Key.alt, KB.Key.left}, {KB.Key.ctrl, KB.Key.alt, KB.Key.left}], altleft)
+        self._kp.hotkey([{KB.Key.alt, KB.KeyCode(char='s')}], saveCurPos)
+        self._kp.hotkey([{KB.Key.alt, KB.KeyCode(char='l')}], loadCurPos)
         self._menu = Menu(self)
-        self._um = UserManager("./data/users", "./data/userslog")
+
+        self._rootDir = os.path.abspath(os.getcwd())
+        self._dataDir = dataDir if len(dataDir) > 0 else os.path.join(self._rootDir, self.__dataDirName)
+        self._mainConfigDir = os.path.join(self._dataDir, self.__mainConfigDirName)
+        self._usersCSV = os.path.join(self._mainConfigDir, self.__usersCSVName)
+        self._usersLogCSV = os.path.join(self._mainConfigDir, self.__usersLogCSVName)
+
+        if not os.path.exists(self._dataDir):
+            Log.w("The '" + self.__dataDirName + "' directory does not exist.")
+            os.makedirs(self._dataDir)
+            Log.w("Created it.")
+        if not os.path.exists(self._mainConfigDir):
+            os.makedirs(self._mainConfigDir)
+
+        self._um = UserManager(self._usersCSV, self._usersLogCSV)
 
     def init(self):
         #! TODO: user spec load
         print("Welcome!")
+        print(CGREY + "Type ':h' for help." + CEND)
         print()
 
-    def finish(self):
+    def logout(self):
         subprocess.call(['setxkbmap', 'hu'])
         print("Goodbye!")
 
     def login(self, trylast=True):
+        if len(self._um._users) < 1:
+            if not self._um.add():
+                quit()
+
         loggedin = False
         if trylast and len(self._um.lastLogin()) > 0:
             lastUser = self._um.lastLogin()[2]
@@ -255,8 +392,9 @@ class Vocabular:
 
         probe = 3
         while not loggedin:
+            print("Login")
             if probe < 1:
-                exit()
+                quit()
             probe = probe - 1
             userName = input(" Username: ")
             password = getpass.getpass(" Password: ")
@@ -282,15 +420,14 @@ class Vocabular:
                 continue
             if cmd[0] == ":":
                 self._menu.menu(cmd[1:])
+            else:
+                print(cmd)
 
 
 def main():
-    print(CBOLD + " --== Vocabular 1.0 ==-- " + CEND)
-    print(CGREY + "(C) 2022. Szilárd LEDÁN (szledan@gmail.com)" + CEND)
-    print()
-    voc = Vocabular()
-    voc.login()
-    voc.loop()
+    vok = Vokabular()
+    vok.login()
+    vok.loop()
 
 
 if __name__ == "__main__":
@@ -337,7 +474,7 @@ for taskNr, task in enumerate(tasks):
         if len(inpt) < 1:
             continue
         if inpt[0] == ":":
-            voc.menu(inpt)
+            vok.menu(inpt)
         else:
             b = 0
             P = P + 1
@@ -360,7 +497,7 @@ print("  Great work! ")
 print("    " + str(G) + "/" + str(P) )
 print()
 
-voc.menuExit()
+vok.menuExit()
 
 # Import the required module for text
 # to speech conversion
